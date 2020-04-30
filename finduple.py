@@ -2,12 +2,12 @@ import pandas as pd
 import numpy as np
 import openpyxl.workbook
 import re
-import sys
-import getopt
 
+#----------- INPUT PARAMETERS : Might be adjusted
 # there are no questions with more or less possible answers than this
 MAX_ANSWERS = 6
 MIN_ANSWERS = 3
+
 re_illegal_chars = re.compile('[\n\r\t]')
 # input Excel file name
 ifile = 'qst.xlsx'
@@ -24,7 +24,7 @@ do_delete_duplicates = False
 # Split questions to separate DataFrame by BRIEFTEXT and store each in separate sheet of Excel file
 # If split questions is False main DataFrame will be stored to a single sheet of an Excel file
 do_split_by_brieftext = True
-
+# --------------END OF INPUT PARAMETERS------------------------------------------------
 
 # When parsing input Excel file each retrieved question with it's answers is stored to an instance
 # of this class. These instances are stored to a list named questions
@@ -128,7 +128,8 @@ for qst in data_frame['QID']:
 print('Parsed {0} questions in the file.'.format(len(questions)))
 print('BRIEFTEXT:')
 print(bt_set)
-
+# sort questions[] by QID
+questions.sort(key=lambda x: x.qid)
 
 # ----------- CHECKS ------------
 if do_check_illegal_chr:
@@ -189,12 +190,17 @@ if do_split_by_brieftext:
         for qst in questions:
             if qst.brieftext != bt:
                 continue
+            # adding a row with question
             df.loc[row] = [qst.qid, bt, qst.question, np.nan]
-            print('row={0}'.format(row))
             row += 1
+            # adding rows with answers
+            for ans in qst.answers:
+                df.loc[row] = [np.nan, np.nan, ans, qst.answers[ans]]
+                row += 1
+        # slash sign is illegal in sheet names
         sheet = bt.replace('/', '-')
         df.to_excel(writer, sheet)
-# save main DataFrame to the output file
+# save main DataFrame to the output file on single sheet
 else:
     data_frame.to_excel(writer)
 writer.save()
