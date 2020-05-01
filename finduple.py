@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import openpyxl.workbook
 import re
 
 # -------------- INPUT PARAMETERS : Might be adjusted --------------
@@ -18,26 +17,27 @@ ofile = 'out.xlsx'
 # Check for illegal characters in the answers. These characters are defined in  RegEx re_illegal_chars
 do_check_illegal_chr = False
 # Check for duplicate questions. The result is printed to console
-do_check_duplicates = True
+do_check_duplicates = False
 # Delete excess duplicate questions in dialog mode
-do_delete_duplicates = False
+do_delete_duplicates = True
 # Delete 4-digit QID questions - these questions will be skipped while parsing input file
 do_delete_4d_qid = True
 # Split questions to separate DataFrame by BRIEFTEXT and store each in separate sheet of Excel file
 # If split questions is False main DataFrame will be stored to a single sheet of an Excel file
-do_split_by_brieftext = True
+do_split_by_brieftext = False
 # -------------- END OF INPUT PARAMETERS --------------
 
 
 # When parsing input Excel file each retrieved question with it's answers is stored to an instance
 # of this class. These instances are stored to a list named questions
 class Question:
-    def __init__(self, nmb_arg=-1, qid_arg=-1, qst_arg='', ans_args={}, bt_arg=''):
+    def __init__(self, nmb_arg=-1, qid_arg=-1, qst_arg='', ans_args={}, bt_arg='', status_arg=''):
         self.__nmb = nmb_arg
         self.__qid = qid_arg
         self.__question = qst_arg
         self.__answers = ans_args
         self.__brieftext = bt_arg
+        self.__status = status_arg
 
     def get_nmb(self):
         return self.__nmb
@@ -59,6 +59,10 @@ class Question:
         return self.__brieftext
     brieftext = property(get_brieftext)
 
+    def get_status(self):
+        return self.__status
+    status = property(get_status)
+
     # Check the answers for illegal characters, TODO: empty text, duplicate text
     def check_answers_ic(self):
         result = 'OK'
@@ -69,17 +73,27 @@ class Question:
                 break
         return result
 
+    # convert instance of Question to string
+    def __str__(self):
+        str_result = 'NMB={0}\tQID={1}\t{2}\tStatus={3}\r\n'\
+            .format(self.__nmb, self.__qid, self.__brieftext, self.__status)
+        str_result += 'Въпрос: {0}\r\n'.format(self.__question)
+        ans_index = 1
+        for answer in qst.answers:
+            str_result += '   {0}: {1} \t\tSCR:{2}\r\n'.format(ans_index, answer, qst.answers[answer])
+            ans_index += 1
+        return str_result
 
-# print the Question to console
-def print_question(qst):
-    print('NMB={0}\tQID={1}\t{2}'.format(qst.nmb, qst.qid, qst.brieftext))
-    print('Question: ' + qst.question)
-    n = 1
-    for ans in qst.answers:
-        print('   {0}: {1} \t\tSCR:{2}'.format(n, ans, qst.answers[ans]))
-        n += 1
-    print()
-    return
+    # convert instance of Question to string
+    def __repr__(self):
+        str_result = 'NMB={0}\tQID={1}\t{2}\tStatus={3}\r\n'\
+            .format(self.__nmb, self.__qid, self.__brieftext, self.__status)
+        str_result += 'Въпрос: {0}\r\n'.format(self.__question)
+        ans_index = 1
+        for answer in qst.answers:
+            str_result += '   {0}: {1} \t\tSCR:{2}\r\n'.format(ans_index, answer, qst.answers[answer])
+            ans_index += 1
+        return str_result
 
 
 # Read Excel file and put data into a DataFrame
@@ -106,6 +120,7 @@ for qst in input_data_frame['QID']:
         # print('QID=', df1['QID'][row])
         qid = int(input_data_frame['QID'][row])
         # print('QUESTION: ', df1['QUESTION/ANSWER'][row])
+        status = input_data_frame['Status'][row]
         bt = input_data_frame['BRIEFTEXT'][row]
         bt_set.add(bt)
         qst_text = input_data_frame['QUESTION/ANSWER'][row]
@@ -132,7 +147,7 @@ for qst in input_data_frame['QID']:
                 skipped += 1
                 row += 1
                 continue
-        q = Question(nmb, qid, qst_text, answers, bt)
+        q = Question(nmb, qid, qst_text, answers, bt, status)
         questions.append(q)
     row += 1
 print('Parsed {0} questions in the file. Skipped {1} with 4-digit QIDs'.format(len(questions), skipped))
@@ -158,7 +173,7 @@ if do_check_illegal_chr:
             print('WARNING: Answers number is below MIN!')
             fail = True
         if fail:
-            print_question(qst)
+            print(qst)
             print()
 
 # CHECK: for duplicates, output to console
@@ -191,9 +206,50 @@ if do_check_duplicates:
 
 # Delete excess duplicate questions in dialog mode
 if do_delete_duplicates:
-    pass
-    # TODO
-
+    duplicates = []
+    to_delete_index = []
+    dup_counter = 0
+    end_deletion = False
+    print('\r\n\r\n------------------------------------------------')
+    print('Изберете въпроси които да бъдат изтрити. Изборът става с въвеждане на индексите им разделени с интервал.')
+    print('Въведете END за приключване на работа преди да е достигнат края на списъка с дублирани въпроси.')
+    input('Потвърдете с Enter.')
+    for qst in questions:
+        # Skip if already detected
+        if qst.nmb in duplicates:
+            continue
+        # duplicates of the current question
+        dup = {}
+        dup_index = 0
+        for qst2 in questions:
+            # Skip self check
+            if qst.nmb == qst2.nmb:
+                continue
+            # if qst.question.lower() == qst2.question.lower():
+            q1_txt = qst.question.lower()
+            q2_txt = qst2.question.lower()
+            q1_bt = qst.brieftext
+            q2_bt = qst.brieftext
+            if (q1_bt + q1_txt) == (q2_bt + q2_txt):
+                duplicates.append(qst.nmb)
+                duplicates.append(qst2.nmb)
+                dup[dup_index] = qst
+                dup[dup_index + 1] = qst2
+                dup_index += 2
+        if len(dup) != 0:
+            dup_counter += 1
+            print('\r\n\r\n------------------------------------------------')
+            print('Count={0}'.format(dup_counter))
+            for n in range(len(dup)):
+                print('ВЪПРОС {0}:'.format(n+1))
+                print(dup[n])
+            user_selection = input('Изберете за изтриване, END за край:')
+            if user_selection.strip() == 'END':
+                end_deletion = True
+                break
+                # TODO: check user input, mark questions to delete, delete questions
+        if end_deletion:
+            break
 # split all questions from questions[] into separate DataFrames.
 # save each DataFrame to separate Sheet in an Excel file named ofile
 # each sheet is named after BRIEFTEXT field
@@ -202,18 +258,19 @@ print('Writing to output file ' + ofile, end='')
 if do_split_by_brieftext:
     for bt in bt_set:
         row = 0
-        df = pd.DataFrame({'QID': '', 'BRIEFTEXT': '', 'QUESTION/ANSWER': '', 'SCR': ''}, index=[0])
+        df = pd.DataFrame({'NMB': '', 'QID': '', 'BRIEFTEXT': '',
+                           'QUESTION/ANSWER': '', 'SCR': '', 'Status': ''}, index=[0])
         valid_qst_counter = 0
         for qst in questions:
             if qst.brieftext != bt:
                 continue
             valid_qst_counter += 1
             # adding a row with question
-            df.loc[row] = [qst.qid, bt, qst.question, np.nan]
+            df.loc[row] = [qst.nmb, qst.qid, bt, qst.question, np.nan, qst.status]
             row += 1
             # adding rows with answers
             for ans in qst.answers:
-                df.loc[row] = [np.nan, np.nan, ans, qst.answers[ans]]
+                df.loc[row] = [np.nan, np.nan, np.nan, ans, qst.answers[ans], np.nan]
                 row += 1
         # do not add empty sheet
         if valid_qst_counter != 0:
@@ -223,5 +280,7 @@ if do_split_by_brieftext:
             print('.', end='')
 # save main DataFrame to the output file on single sheet
 else:
+    # TODO: export all questions to single DataFrame 
     input_data_frame.to_excel(writer)
 writer.save()
+print('\r\nDONE!')
