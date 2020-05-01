@@ -84,7 +84,7 @@ class Question:
             ans_index += 1
         return str_result
 
-    # convert instance of Question to string
+    # represent instance of Question as string
     def __repr__(self):
         str_result = 'NMB={0}\tQID={1}\t{2}\tStatus={3}\r\n'\
             .format(self.__nmb, self.__qid, self.__brieftext, self.__status)
@@ -240,22 +240,32 @@ if do_delete_duplicates:
             dup_counter += 1
             print('\r\n\r\n------------------------------------------------')
             print('Count={0}'.format(dup_counter))
+            n = 0
             for n in range(len(dup)):
                 print('ВЪПРОС {0}:'.format(n+1))
                 print(dup[n])
-            user_selection = input('Изберете за изтриване, END за край:')
-            if user_selection.strip() == 'END':
-                end_deletion = True
-                break
-                # TODO: check user input, mark questions to delete, delete questions
+            # ^([1-9]\s)+[1-9]?$|^[1-9]{1}$
+            # - RegEx matches single digits 1 to 9 separate by space or only one single digit
+            re_check_user_input = re.compile('^([1-{0}]\\s)+[1-{0}]?$|^[1-{0}]'.format(n + 1) + '{1}$')
+            while True:
+                user_selection = input('Изберете за изтриване, END за край:')
+                if user_selection.strip() == 'END':
+                    end_deletion = True
+                    break
+                if re_check_user_input.match(user_selection):
+                    break
+                else:
+                    print('ERROR: Invalid user input. Try again!')
+
         if end_deletion:
             break
+
 # split all questions from questions[] into separate DataFrames.
 # save each DataFrame to separate Sheet in an Excel file named ofile
 # each sheet is named after BRIEFTEXT field
 writer = pd.ExcelWriter(ofile)
-print('Writing to output file ' + ofile, end='')
 if do_split_by_brieftext:
+    print('Writing to output file ' + ofile + ' on separate sheets. Working...', end='')
     for bt in bt_set:
         row = 0
         df = pd.DataFrame({'NMB': '', 'QID': '', 'BRIEFTEXT': '',
@@ -280,7 +290,19 @@ if do_split_by_brieftext:
             print('.', end='')
 # save main DataFrame to the output file on single sheet
 else:
-    # TODO: export all questions to single DataFrame 
-    input_data_frame.to_excel(writer)
+    # export all questions to single DataFrame
+    print('Writing to output file ' + ofile + ' on single sheet. Working...', end='')
+    row = 0
+    df = pd.DataFrame({'NMB': '', 'QID': '', 'BRIEFTEXT': '',
+                       'QUESTION/ANSWER': '', 'SCR': '', 'Status': ''}, index=[0])
+    for qst in questions:
+        # adding a row with question
+        df.loc[row] = [qst.nmb, qst.qid, qst.brieftext, qst.question, np.nan, qst.status]
+        row += 1
+        # adding rows with answers
+        for ans in qst.answers:
+            df.loc[row] = [np.nan, np.nan, np.nan, ans, qst.answers[ans], np.nan]
+            row += 1
+    df.to_excel(writer, 'Sheet')
 writer.save()
 print('\r\nDONE!')
