@@ -147,6 +147,14 @@ for qst in input_data_frame['QID']:
                 skipped += 1
                 row += 1
                 continue
+        # CHECK: for too many answers
+        if len(answers) == MAX_ANSWERS:
+            print('WARNING: Answers number is at MAX in question NMB={0} QID={1}'.format(nmb, qid))
+            fail = True
+        # Check: for min answers
+        if len(answers) < MIN_ANSWERS:
+            print('WARNING: Answers number is below MIN in question NMB={0} QID={1}'.format(nmb, qid))
+            fail = True
         q = Question(nmb, qid, qst_text, answers, bt, status)
         questions.append(q)
     row += 1
@@ -159,20 +167,9 @@ questions.sort(key=lambda x: x.qid)
 # ----------- CHECKS ------------
 if do_check_illegal_chr:
     for qst in questions:
-        fail = False
         # CHECK: for illegal characters
         if qst.check_answers_ic() != 'OK':
             print(qst.check_answers_ic())
-            fail = True
-        # CHECK: for too many answers
-        if len(qst.answers) == MAX_ANSWERS:
-            print('WARNING: Answers number is at MAX!')
-            fail = True
-        # Check: for min answers
-        if len(qst.answers) < MIN_ANSWERS:
-            print('WARNING: Answers number is below MIN!')
-            fail = True
-        if fail:
             print(qst)
             print()
 
@@ -205,9 +202,9 @@ if do_check_duplicates:
             print('DUP {0}: {1}'.format(dup_counter-1, dup))
 
 # Delete excess duplicate questions in dialog mode
+to_delete_qid = []
 if do_delete_duplicates:
     duplicates = []
-    to_delete_index = []
     dup_counter = 0
     end_deletion = False
     print('\r\n\r\n------------------------------------------------')
@@ -244,26 +241,34 @@ if do_delete_duplicates:
             for n in range(len(dup)):
                 print('ВЪПРОС {0}:'.format(n+1))
                 print(dup[n])
-            # ^([1-9]\s)+[1-9]?$|^[1-9]{1}$
-            # - RegEx matches single digits 1 to 9 separate by space or only one single digit
-            re_check_user_input = re.compile('^([1-{0}]\\s)+[1-{0}]?$|^[1-{0}]'.format(n + 1) + '{1}$')
+            # ^([1-9]\s)+[1-9]?$|^[1-9]{1}$|^$
+            # - RegEx matches single digits 1 to 9 separate by space or only one single digit or an empty string
+            re_check_user_input = re.compile('^([1-{0}]\\s)+[1-{0}]?$|^[1-{0}]'.format(n + 1) + '{1}$|^$')
             while True:
                 user_selection = input('Изберете за изтриване, END за край:')
-                if user_selection.strip() == 'END':
+                if user_selection.strip().upper() == 'END':
                     end_deletion = True
                     break
                 if re_check_user_input.match(user_selection):
                     break
                 else:
                     print('ERROR: Invalid user input. Try again!')
-
-        if end_deletion:
-            break
-
+            if end_deletion:
+                break
+            if user_selection != '':
+                selections = user_selection.split()
+                for selected in selections:
+                    qst = dup[int(selected)-1]
+                    print('Delete QID={0}'.format(qst.qid))
+                    to_delete_qid.append(qst.qid)
+            else:
+                print('Nothing to delete.')
 # split all questions from questions[] into separate DataFrames.
 # save each DataFrame to separate Sheet in an Excel file named ofile
 # each sheet is named after BRIEFTEXT field
 writer = pd.ExcelWriter(ofile)
+print('QID to delete:')
+print(to_delete_qid)
 if do_split_by_brieftext:
     print('Writing to output file ' + ofile + ' on separate sheets. Working...', end='')
     for bt in bt_set:
@@ -273,6 +278,8 @@ if do_split_by_brieftext:
         valid_qst_counter = 0
         for qst in questions:
             if qst.brieftext != bt:
+                continue
+            if qst.qid in to_delete_qid:
                 continue
             valid_qst_counter += 1
             # adding a row with question
@@ -288,7 +295,7 @@ if do_split_by_brieftext:
             sheet = bt.replace('/', '-')
             df.to_excel(writer, sheet)
             print('.', end='')
-# save main DataFrame to the output file on single sheet
+# save to the output file on single sheet
 else:
     # export all questions to single DataFrame
     print('Writing to output file ' + ofile + ' on single sheet. Working...', end='')
@@ -296,6 +303,9 @@ else:
     df = pd.DataFrame({'NMB': '', 'QID': '', 'BRIEFTEXT': '',
                        'QUESTION/ANSWER': '', 'SCR': '', 'Status': ''}, index=[0])
     for qst in questions:
+        if qst.qid in to_delete_qid:
+            print('Skip saving QID={0}'.format(qst.qid))
+            continue
         # adding a row with question
         df.loc[row] = [qst.nmb, qst.qid, qst.brieftext, qst.question, np.nan, qst.status]
         row += 1
