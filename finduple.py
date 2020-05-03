@@ -1,25 +1,36 @@
 import pandas as pd
 import numpy as np
 import re
+import string
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 # -------------- INPUT PARAMETERS : Might be adjusted --------------
-# there are no questions with more or less possible answers than this
+# There are no questions with more or less possible answers than this
 MAX_ANSWERS = 6
 MIN_ANSWERS = 3
 
+# Threshold of similarity for string comparision with compare_text() function.
+# Above it strings are considered close enough. Value is between 0 and 100.
+# 100 - completely identical
+# 99 - completely identical with punctuation symbols removed and case ignored
+# Value below 99 will use similarity search and not exact match. This might take longer time on bigger files
+# Set to 99 for fast work and set lower value for similarity check
+SIMILARITY_THRESHOLD = 65
+
 re_illegal_chars = re.compile('[\n\r\t]')
 # input Excel file name
-ifile = 'qst.xlsx'
+ifile = 'out.xlsx'
 # output Excel file name
-ofile = 'out.xlsx'
+ofile = 'out2.xlsx'
 
 # ---- These logical vars determine performed processing ----
 # Check for illegal characters in the answers. These characters are defined in  RegEx re_illegal_chars
 do_check_illegal_chr = False
 # Check for duplicate questions. The result is printed to console
-do_check_duplicates = False
+do_check_duplicates = True
 # Delete excess duplicate questions in dialog mode
-do_delete_duplicates = True
+do_delete_duplicates = False
 # Delete 4-digit QID questions - these questions will be skipped while parsing input file
 do_delete_4d_qid = True
 # Split questions to separate DataFrame by BRIEFTEXT and store each in separate sheet of Excel file
@@ -94,6 +105,42 @@ class Question:
             str_result += '   {0}: {1} \t\tSCR:{2}\r\n'.format(ans_index, answer, qst.answers[answer])
             ans_index += 1
         return str_result
+
+
+# Returns the level of similarity from 0 to 100.
+# If strings are exactly same returned value is 100
+# Returns 99 when strings match with case ignored and punctuation symbols removed
+# Lower values are result of similarity comparision
+def compare_text(t1='', t2=''):
+    if t1 == t2:
+        return 100
+
+    # remove punctuation symbols, convert to lowercase, compare
+    text1 = ''.join([word for word in t1 if word not in string.punctuation])
+    text1 = text1.lower()
+    text2 = ''.join([word for word in t2 if word not in string.punctuation])
+    text2 = text2.lower()
+    if text1 == text2:
+        return 99
+
+    # speed up comparision if similarity check is not required
+    if SIMILARITY_THRESHOLD >= 99:
+        return 0
+
+    vectorizer = TfidfVectorizer()
+    matrix = vectorizer.fit_transform([text1, text2])
+    cs = cosine_similarity(matrix[0:1], matrix)
+    scs = str(cs[0, 1])  # convert to string and remove the first character
+    fcs = float(scs) * 100  # convert to float
+    ics = int(fcs)  # convert to integer
+#TODO: Remove next lines after testig
+    if ics > 65:
+        print()
+        print(text1)
+        print(text2)
+        print('CS={0}'.format(ics))
+
+    return ics
 
 
 # Read Excel file and put data into a DataFrame
@@ -192,7 +239,7 @@ if do_check_duplicates:
             q2_txt = qst2.question.lower()
             q1_bt = qst.brieftext
             q2_bt = qst.brieftext
-            if (q1_bt + q1_txt) == (q2_bt + q2_txt):
+            if compare_text(q1_bt + ' ' + q1_txt, q2_bt + ' ' + q2_txt) >= SIMILARITY_THRESHOLD:
                 dup_counter += 1
                 duplicates[qst.nmb] = qst.qid
                 duplicates[qst2.nmb] = qst2.qid
@@ -227,7 +274,7 @@ if do_delete_duplicates:
             q2_txt = qst2.question.lower()
             q1_bt = qst.brieftext
             q2_bt = qst.brieftext
-            if (q1_bt + q1_txt) == (q2_bt + q2_txt):
+            if compare_text(q1_bt + ' ' + q1_txt, q2_bt + ' ' + q2_txt) >= SIMILARITY_THRESHOLD:
                 duplicates.append(qst.nmb)
                 duplicates.append(qst2.nmb)
                 dup[dup_index] = qst
@@ -313,6 +360,15 @@ else:
         for ans in qst.answers:
             df.loc[row] = [np.nan, np.nan, np.nan, ans, qst.answers[ans], np.nan]
             row += 1
-    df.to_excel(writer, 'Sheet')
-writer.save()
+        df.to_excel(writer, 'Sheet')
+
+while True:
+    try:
+        writer.save()
+        break
+    except:
+        print()
+        print('ERROR: Failed writing to {0}. Maybe open by other program.'.format(ofile))
+        input('To try again press Enter. ')
+
 print('\r\nDONE!')
