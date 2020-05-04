@@ -16,13 +16,13 @@ MIN_ANSWERS = 3
 # 99 - completely identical with punctuation symbols removed and case ignored
 # Value below 99 will use similarity search and not exact match. This might take longer time on bigger files
 # Set to 99 for fast work and set lower value for similarity check
-SIMILARITY_THRESHOLD = 65
+SIMILARITY_THRESHOLD = 99
 
 re_illegal_chars = re.compile('[\n\r\t]')
 # input Excel file name
-ifile = 'out.xlsx'
+ifile = 'qst.xlsx'
 # output Excel file name
-ofile = 'out2.xlsx'
+ofile = 'out.xlsx'
 
 # ---- These logical vars determine performed processing ----
 # Check for illegal characters in the answers. These characters are defined in  RegEx re_illegal_chars
@@ -133,11 +133,11 @@ def compare_text(t1='', t2=''):
     scs = str(cs[0, 1])  # convert to string and remove the first character
     fcs = float(scs) * 100  # convert to float
     ics = int(fcs)  # convert to integer
-#TODO: Remove next lines after testig
+# TODO: Remove next lines after testing
     if ics > 65:
         print()
-        print(text1)
-        print(text2)
+        print(t1)
+        print(t2)
         print('CS={0}'.format(ics))
 
     return ics
@@ -169,6 +169,7 @@ for qst in input_data_frame['QID']:
         # print('QUESTION: ', df1['QUESTION/ANSWER'][row])
         status = input_data_frame['Status'][row]
         bt = input_data_frame['BRIEFTEXT'][row]
+        bt = bt.strip('.')
         bt_set.add(bt)
         qst_text = input_data_frame['QUESTION/ANSWER'][row]
         qst_text = qst_text.strip(" \n\r?:.")
@@ -360,7 +361,7 @@ else:
         for ans in qst.answers:
             df.loc[row] = [np.nan, np.nan, np.nan, ans, qst.answers[ans], np.nan]
             row += 1
-        df.to_excel(writer, 'Sheet')
+    df.to_excel(writer, 'Sheet')
 
 while True:
     try:
