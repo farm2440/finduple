@@ -90,8 +90,8 @@ class Question:
             .format(self.__nmb, self.__qid, self.__brieftext, self.__status)
         str_result += 'Въпрос: {0}\r\n'.format(self.__question)
         ans_index = 1
-        for answer in qst.answers:
-            str_result += '   {0}: {1} \t\tSCR:{2}\r\n'.format(ans_index, answer, qst.answers[answer])
+        for answer in self.__answers:
+            str_result += '   {0}: {1} \t\tSCR:{2}\r\n'.format(ans_index, answer, self.__answers[answer])
             ans_index += 1
         return str_result
 
@@ -101,8 +101,8 @@ class Question:
             .format(self.__nmb, self.__qid, self.__brieftext, self.__status)
         str_result += 'Въпрос: {0}\r\n'.format(self.__question)
         ans_index = 1
-        for answer in qst.answers:
-            str_result += '   {0}: {1} \t\tSCR:{2}\r\n'.format(ans_index, answer, qst.answers[answer])
+        for answer in self.__answers:
+            str_result += '   {0}: {1} \t\tSCR:{2}\r\n'.format(ans_index, answer, self.__answers[answer])
             ans_index += 1
         return str_result
 
