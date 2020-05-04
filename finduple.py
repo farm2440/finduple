@@ -276,11 +276,14 @@ if do_delete_duplicates:
             q1_bt = qst.brieftext
             q2_bt = qst.brieftext
             if compare_text(q1_bt + ' ' + q1_txt, q2_bt + ' ' + q2_txt) >= SIMILARITY_THRESHOLD:
-                duplicates.append(qst.nmb)
-                duplicates.append(qst2.nmb)
-                dup[dup_index] = qst
-                dup[dup_index + 1] = qst2
-                dup_index += 2
+                if qst.nmb not in duplicates:
+                    duplicates.append(qst.nmb)
+                    dup[dup_index] = qst
+                    dup_index += 1
+                if qst2.nmb not in duplicates:
+                    duplicates.append(qst2.nmb)
+                    dup[dup_index] = qst2
+                    dup_index += 1
         if len(dup) != 0:
             dup_counter += 1
             print('\r\n\r\n------------------------------------------------')
