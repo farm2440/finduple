@@ -16,21 +16,21 @@ MIN_ANSWERS = 3
 # 99 - completely identical with punctuation symbols removed and case ignored
 # Value below 99 will use similarity search and not exact match. This might take longer time on bigger files
 # Set to 99 for fast work and set lower value for similarity check
-SIMILARITY_THRESHOLD = 99
+SIMILARITY_THRESHOLD = 65
 
 re_illegal_chars = re.compile('[\n\r\t]')
 # input Excel file name
 ifile = 'qst.xlsx'
 # output Excel file name
-ofile = 'out.xlsx'
+ofile = 'tmp.xlsx'
 
 # ---- These logical vars determine performed processing ----
 # Check for illegal characters in the answers. These characters are defined in  RegEx re_illegal_chars
 do_check_illegal_chr = False
 # Check for duplicate questions. The result is printed to console
-do_check_duplicates = True
+do_check_duplicates = False
 # Delete excess duplicate questions in dialog mode
-do_delete_duplicates = False
+do_delete_duplicates = True
 # Delete 4-digit QID questions - these questions will be skipped while parsing input file
 do_delete_4d_qid = True
 # Split questions to separate DataFrame by BRIEFTEXT and store each in separate sheet of Excel file
@@ -42,13 +42,14 @@ do_split_by_brieftext = False
 # When parsing input Excel file each retrieved question with it's answers is stored to an instance
 # of this class. These instances are stored to a list named questions
 class Question:
-    def __init__(self, nmb_arg=-1, qid_arg=-1, qst_arg='', ans_args={}, bt_arg='', status_arg=''):
+    def __init__(self, nmb_arg=-1, qid_arg=-1, qst_arg='', ans_args={}, bt_arg='', status_arg='', docId_arg=-1):
         self.__nmb = nmb_arg
         self.__qid = qid_arg
         self.__question = qst_arg
         self.__answers = ans_args
         self.__brieftext = bt_arg
         self.__status = status_arg
+        self.__docId = docId_arg
 
     def get_nmb(self):
         return self.__nmb
@@ -57,6 +58,10 @@ class Question:
     def get_qid(self):
         return self.__qid
     qid = property(get_qid)
+
+    def get_docId(self):
+        return self.__docId
+    docId = property(get_docId)
 
     def get_question(self):
         return self.__question
@@ -86,8 +91,8 @@ class Question:
 
     # convert instance of Question to string
     def __str__(self):
-        str_result = 'NMB={0}\tQID={1}\t{2}\tStatus={3}\r\n'\
-            .format(self.__nmb, self.__qid, self.__brieftext, self.__status)
+        str_result = 'NMB={0}\tQID={1}\t{2}\tDocID={3}\tStatus={4}\r\n'\
+            .format(self.__nmb, self.__qid, self.__brieftext, self.__docId, self.__status)
         str_result += 'Въпрос: {0}\r\n'.format(self.__question)
         ans_index = 1
         for answer in self.__answers:
@@ -97,8 +102,8 @@ class Question:
 
     # represent instance of Question as string
     def __repr__(self):
-        str_result = 'NMB={0}\tQID={1}\t{2}\tStatus={3}\r\n'\
-            .format(self.__nmb, self.__qid, self.__brieftext, self.__status)
+        str_result = 'NMB={0}\tQID={1}\t{2}\tDocID={3}\tStatus={4}\r\n'\
+            .format(self.__nmb, self.__qid, self.__brieftext, self.__docId, self.__status)
         str_result += 'Въпрос: {0}\r\n'.format(self.__question)
         ans_index = 1
         for answer in self.__answers:
@@ -133,13 +138,6 @@ def compare_text(t1='', t2=''):
     scs = str(cs[0, 1])  # convert to string and remove the first character
     fcs = float(scs) * 100  # convert to float
     ics = int(fcs)  # convert to integer
-# TODO: Remove next lines after testing
-    if ics > 65:
-        print()
-        print(t1)
-        print(t2)
-        print('CS={0}'.format(ics))
-
     return ics
 
 
@@ -152,6 +150,20 @@ print(xl.sheet_names)
 print('Reading data from ' + xl.sheet_names[0])
 input_data_frame = xl.parse(xl.sheet_names[0])
 print('Rows in DataFrame:', len(input_data_frame.index))
+# check if there is a second sheet named "Класификатор" and parse it
+qualifier = {}
+row = 0
+if len(xl.sheet_names) >= 2:
+    if xl.sheet_names[1] == 'Класификатор':
+        qualifier_data_frame = xl.parse(xl.sheet_names[1])
+        print("Прочетен е 'Класификатор'")
+        for qlf in qualifier_data_frame['DocID']:
+            qlf_txt = qualifier_data_frame['Документен класификатор'][row]
+            row += 1
+            # print('DocID={0}  Text:{1}'.format(int(qlf), qlf_txt))
+            qualifier[int(qlf)] = qlf_txt
+else:
+    print("WARNING: No second sheet named 'Класификатор' found!")
 
 # Parse questions from DataFrame and put them in a list of Questions objects
 questions = []
@@ -168,6 +180,7 @@ for qst in input_data_frame['QID']:
         qid = int(input_data_frame['QID'][row])
         # print('QUESTION: ', df1['QUESTION/ANSWER'][row])
         status = input_data_frame['Status'][row]
+        docId = int(input_data_frame['DocID'][row])
         bt = input_data_frame['BRIEFTEXT'][row]
         bt = bt.strip('.')
         bt_set.add(bt)
@@ -203,7 +216,7 @@ for qst in input_data_frame['QID']:
         if len(answers) < MIN_ANSWERS:
             print('WARNING: Answers number is below MIN in question NMB={0} QID={1}'.format(nmb, qid))
             fail = True
-        q = Question(nmb, qid, qst_text, answers, bt, status)
+        q = Question(nmb, qid, qst_text, answers, bt, status, docId)
         questions.append(q)
     row += 1
 print('Parsed {0} questions in the file. Skipped {1} with 4-digit QIDs'.format(len(questions), skipped))
@@ -291,6 +304,8 @@ if do_delete_duplicates:
             n = 0
             for n in range(len(dup)):
                 print('ВЪПРОС {0}:'.format(n+1))
+                if dup[n].docId in qualifier:
+                    print(qualifier[dup[n].docId])
                 print(dup[n])
             # ^([1-9]\s)+[1-9]?$|^[1-9]{1}$|^$
             # - RegEx matches single digits 1 to 9 separate by space or only one single digit or an empty string
@@ -325,7 +340,7 @@ if do_split_by_brieftext:
     for bt in bt_set:
         row = 0
         df = pd.DataFrame({'NMB': '', 'QID': '', 'BRIEFTEXT': '',
-                           'QUESTION/ANSWER': '', 'SCR': '', 'Status': ''}, index=[0])
+                           'QUESTION/ANSWER': '', 'SCR': '', 'DocID': '', 'Status': ''}, index=[0])
         valid_qst_counter = 0
         for qst in questions:
             if qst.brieftext != bt:
@@ -334,11 +349,11 @@ if do_split_by_brieftext:
                 continue
             valid_qst_counter += 1
             # adding a row with question
-            df.loc[row] = [qst.nmb, qst.qid, bt, qst.question, np.nan, qst.status]
+            df.loc[row] = [qst.nmb, qst.qid, bt, qst.question, np.nan, qst.docId, qst.status]
             row += 1
             # adding rows with answers
             for ans in qst.answers:
-                df.loc[row] = [np.nan, np.nan, np.nan, ans, qst.answers[ans], np.nan]
+                df.loc[row] = [np.nan, np.nan, np.nan, ans, qst.answers[ans], np.nan, np.nan]
                 row += 1
         # do not add empty sheet
         if valid_qst_counter != 0:
@@ -352,17 +367,17 @@ else:
     print('Writing to output file ' + ofile + ' on single sheet. Working...', end='')
     row = 0
     df = pd.DataFrame({'NMB': '', 'QID': '', 'BRIEFTEXT': '',
-                       'QUESTION/ANSWER': '', 'SCR': '', 'Status': ''}, index=[0])
+                       'QUESTION/ANSWER': '', 'SCR': '', 'DocID': '', 'Status': ''}, index=[0])
     for qst in questions:
         if qst.qid in to_delete_qid:
             print('Skip saving QID={0}'.format(qst.qid))
             continue
         # adding a row with question
-        df.loc[row] = [qst.nmb, qst.qid, qst.brieftext, qst.question, np.nan, qst.status]
+        df.loc[row] = [qst.nmb, qst.qid, qst.brieftext, qst.question, np.nan, qst.docId, qst.status]
         row += 1
         # adding rows with answers
         for ans in qst.answers:
-            df.loc[row] = [np.nan, np.nan, np.nan, ans, qst.answers[ans], np.nan]
+            df.loc[row] = [np.nan, np.nan, np.nan, ans, qst.answers[ans], np.nan, np.nan]
             row += 1
     df.to_excel(writer, 'Sheet')
 
